@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { SoundKit as SK } from './audio.js';
 import { TrackKit as TK } from './tracks.js';
-import { createKuromi, kuromiReady } from './kuromi.js';
+import { createKuromi, kuromiReady, CELEB_MOVES } from './kuromi.js';
 import './style.css';
 
 const LANE_X = TK.LANE_X;
@@ -255,18 +255,27 @@ $('btn-book-continue').addEventListener('click', () => {
   if (state === 'book') { state = 'playing'; SK.startMusic(track.def.music); }
 });
 
-/* ===== сладости: зачисление + праздник на каждой сотне ===== */
+/* ===== сладости: зачисление + праздник на каждом полтиннике ===== */
 const CELEB_DUR = 2.0;
+let lastMove = -1;
+function startCelebration(move) {
+  if (!move) { /* случайное движение, но не то же, что в прошлый раз */
+    let m;
+    do { m = Math.floor(Math.random() * CELEB_MOVES.length); } while (m === lastMove);
+    lastMove = m;
+    move = CELEB_MOVES[m];
+  }
+  player.celebMove = move;
+  player.celebT = CELEB_DUR;
+  SK.starPop(2);
+}
 function addSweets(n) {
   const before = player.collected;
   player.collected += n;
   $('hud-count').textContent = player.collected;
-  if (Math.floor(player.collected / 100) > Math.floor(before / 100)) {
-    player.celebT = CELEB_DUR; // Куроми оборачивается и подмигивает
-    SK.starPop(2);
-  }
+  if (Math.floor(player.collected / 50) > Math.floor(before / 50)) startCelebration();
 }
-window.__celebrate = () => { if (player) player.celebT = CELEB_DUR; }; // для отладки/тестов
+window.__celebrate = (move) => { if (player) startCelebration(move); }; // для отладки/тестов
 window.__debug = () => ({
   state, children: scene.children.length,
   cam: camera.position.toArray().map((v) => +v.toFixed(2)),
@@ -492,7 +501,8 @@ function update(dt) {
     laneVel: p.laneV, runSpeed: p.speed,
     stumble: p.stumbleT > 0 ? Math.min(1, p.stumbleT / 0.55) : 0,
     squash: p.landT > 0 ? p.landT / 0.16 : 0,
-    celebrate: p.celebT > 0 ? CELEB_DUR - p.celebT : -1
+    celebrate: p.celebT > 0 ? CELEB_DUR - p.celebT : -1,
+    celebrateMove: p.celebMove
   });
   /* мигание неуязвимости (кроме празднования — там Куроми всегда видна) */
   kuromi.group.visible = p.celebT > 0 || p.invuln <= 0 || Math.floor(elapsed * 12) % 2 === 0;
