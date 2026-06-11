@@ -1,0 +1,16 @@
+import { chromium } from 'playwright';
+const browser = await chromium.launch();
+const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+await page.goto('http://localhost:5199/', { waitUntil: 'networkidle' });
+await page.waitForTimeout(600);
+await page.click('.track-card[data-track="candy"]');
+await page.waitForTimeout(3600);
+await page.keyboard.press('ArrowRight');
+await page.waitForTimeout(700);
+await page.screenshot({ path: 'shots/lane-right.png' });
+await page.keyboard.press('ArrowLeft');
+await page.keyboard.press('ArrowLeft');
+await page.waitForTimeout(700);
+await page.screenshot({ path: 'shots/lane-left.png' });
+await browser.close();
+console.log('ок');

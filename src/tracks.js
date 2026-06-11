@@ -3,7 +3,9 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 export const TrackKit = (function () {
-  const LANE_X = [-2.2, 0, 2.2];
+  /* камера смотрит вдоль +z, поэтому экранное «вправо» — это мировой −x:
+     полоса 0 (влево) = +x, полоса 2 (вправо) = −x */
+  const LANE_X = [2.2, 0, -2.2];
   const ROAD_W = 7.4;
 
   /* прототип делался под легаси-освещение (three r128) — компенсируем физичные единицы света */
