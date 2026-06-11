@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🖤</text></svg>">
+  <title>Kuromi Run — Куроми Раннер</title>
+  <script type="module" crossorigin src="./assets/index-CEh-9noE.js"></script>
+  <link rel="stylesheet" crossorigin href="./assets/index-D_HRgU_l.css">
+</head>
+<body>
+  <canvas id="game-canvas"></canvas>
+
+  <!-- ГЛАВНОЕ МЕНЮ -->
+  <div id="menu" class="screen visible" data-screen-label="Главное меню">
+    <button class="round-btn btn-sound menu-sound" aria-label="Звук">
+      <svg class="icon-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4V5z" fill="currentColor" stroke="none"></path><path d="M15.5 8.5a5 5 0 0 1 0 7"></path><path d="M18.5 5.5a9.4 9.4 0 0 1 0 13"></path></svg>
+      <svg class="icon-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4V5z" fill="currentColor" stroke="none"></path><path d="m16 9 6 6"></path><path d="m22 9-6 6"></path></svg>
+    </button>
+    <h1>KUROMI <span class="accent">RUN</span></h1>
+    <p class="tagline">Беги, прыгай и собирай сладости!</p>
+    <div id="track-cards"></div>
+  </div>
+
+  <!-- HUD -->
+  <div id="hud" class="screen" data-screen-label="Игра">
+    <div id="hud-top">
+      <div id="candy-counter">
+        <span class="candy-ico"></span>
+        <span id="hud-count">0</span>
+      </div>
+      <div id="progress-wrap"><div id="progress-fill"></div></div>
+      <div id="hud-buttons">
+        <button class="round-btn btn-sound" aria-label="Звук">
+          <svg class="icon-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4V5z" fill="currentColor" stroke="none"></path><path d="M15.5 8.5a5 5 0 0 1 0 7"></path><path d="M18.5 5.5a9.4 9.4 0 0 1 0 13"></path></svg>
+          <svg class="icon-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4V5z" fill="currentColor" stroke="none"></path><path d="m16 9 6 6"></path><path d="m22 9-6 6"></path></svg>
+        </button>
+        <button id="btn-pause" class="round-btn" aria-label="Пауза">
+          <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4.4" height="14" rx="2"></rect><rect x="13.6" y="5" width="4.4" height="14" rx="2"></rect></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ОТСЧЁТ -->
+  <div id="countdown" class="overlay" data-screen-label="Отсчёт">
+    <div id="countdown-num">3</div>
+  </div>
+
+  <!-- ПАУЗА -->
+  <div id="pause-overlay" class="overlay" data-screen-label="Пауза">
+    <div class="panel">
+      <h2>Пауза</h2>
+      <div class="btn-col">
+        <button id="btn-resume" class="big-btn">Продолжить</button>
+        <button id="btn-restart" class="big-btn alt">Заново</button>
+        <button id="btn-pause-menu" class="big-btn alt">В меню</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- КНИЖНАЯ ПЕРЕМЕНКА -->
+  <div id="book-break" class="overlay" data-screen-label="Книжная переменка">
+    <div class="panel">
+      <span class="book-flag">Книжная переменка</span>
+      <div class="book-cover"></div>
+      <h2>Читать книжки — классно!</h2>
+      <p id="book-author">Корней Чуковский</p>
+      <p id="book-title">«Мойдодыр» и «Айболит»</p>
+      <p id="book-desc">Весёлые стихи-сказки, которые легко читать вслух.</p>
+      <div class="btn-col">
+        <button id="btn-book-continue" class="big-btn">Бежать дальше!</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ФИНИШ -->
+  <div id="finish" class="screen" data-screen-label="Финиш">
+    <div class="panel">
+      <h2>Финиш! 🎉</h2>
+      <div id="finish-stars">
+        <span class="big-star">★</span><span class="big-star">★</span><span class="big-star">★</span>
+      </div>
+      <p id="finish-sum">Собрано: <b id="finish-count">0</b> из <span id="finish-total">0</span></p>
+      <p id="finish-msg"></p>
+      <div class="btn-col">
+        <button id="btn-again" class="big-btn">Ещё раз</button>
+        <button id="btn-finish-menu" class="big-btn alt">В меню</button>
+      </div>
+    </div>
+  </div>
+
+  <canvas id="confetti-canvas"></canvas>
+
+</body>
+</html>
