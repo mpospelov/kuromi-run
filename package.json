@@ -1,0 +1,18 @@
+{
+  "name": "kuromi-run",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "three": "^0.184.0"
+  },
+  "devDependencies": {
+    "playwright": "^1.60.0",
+    "vite": "^6.4.3"
+  }
+}
