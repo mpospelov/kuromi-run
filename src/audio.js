@@ -57,6 +57,12 @@ export const SoundKit = (function () {
       [74,47],[78,null],[81,null],[86,null],[88,55],[86,null],[83,null],[81,null],
       [74,50],[78,null],[81,null],[86,null],[83,57],[81,null],[78,null],[74,null],
       [76,45],[81,null],[78,null],[74,null],[73,49],[74,null],[null,null],[null,null]
+    ]},
+    space: { tempo: 100, wave: 'sine', steps: [
+      [69,45],[null,null],[76,null],[81,null],[80,52],[null,null],[76,null],[72,null],
+      [69,41],[null,null],[77,null],[81,null],[79,50],[null,null],[74,null],[71,null],
+      [69,45],[null,null],[76,null],[81,null],[84,52],[null,null],[81,null],[77,null],
+      [83,40],[null,null],[79,null],[76,null],[74,52],[72,null],[null,45],[null,null]
     ]}
   };
 
@@ -136,6 +142,29 @@ export const SoundKit = (function () {
     o.connect(g); g.connect(sfxGain);
     o.start(t); o.stop(t + 0.34);
   }
+  function boom() { /* взрыв сверхновой: низкий гул + ниспадающий тон */
+    if (!ensureCtx()) return;
+    const t = ctx.currentTime;
+    const len = 1.1, buf = ctx.createBuffer(1, ctx.sampleRate * len, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 1.6);
+    const src = ctx.createBufferSource(); src.buffer = buf;
+    const f = ctx.createBiquadFilter(); f.type = 'lowpass';
+    f.frequency.setValueAtTime(900, t);
+    f.frequency.exponentialRampToValueAtTime(120, t + len);
+    const g = ctx.createGain(); g.gain.value = 0.7;
+    src.connect(f); f.connect(g); g.connect(sfxGain);
+    src.start(t);
+    const o = ctx.createOscillator(), og = ctx.createGain();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(130, t);
+    o.frequency.exponentialRampToValueAtTime(28, t + 1.0);
+    og.gain.setValueAtTime(0.0001, t);
+    og.gain.linearRampToValueAtTime(0.6, t + 0.04);
+    og.gain.exponentialRampToValueAtTime(0.0001, t + 1.1);
+    o.connect(og); og.connect(sfxGain);
+    o.start(t); o.stop(t + 1.2);
+  }
   function countTick(last) {
     if (!ensureCtx()) return;
     note(ctx.currentTime, last ? 84 : 72, last ? 0.4 : 0.15, 'triangle', sfxGain, 0.45);
@@ -166,5 +195,5 @@ export const SoundKit = (function () {
   }
   function isEnabled() { return soundOn; }
 
-  return { tap: ensureCtx, ding, dingBig, boing, swish, thud, fanfare, starPop, countTick, startMusic, stopMusic, setEnabled, isEnabled };
+  return { tap: ensureCtx, ding, dingBig, boing, swish, thud, boom, fanfare, starPop, countTick, startMusic, stopMusic, setEnabled, isEnabled };
 })();

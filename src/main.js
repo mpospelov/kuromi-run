@@ -276,6 +276,7 @@ function addSweets(n) {
   if (Math.floor(player.collected / 50) > Math.floor(before / 50)) startCelebration();
 }
 window.__celebrate = (move) => { if (player) startCelebration(move); }; // для отладки/тестов
+window.__warp = (z) => { if (player) player.z = z; }; // телепорт для тестов финала
 window.__debug = () => ({
   state, children: scene.children.length,
   cam: camera.position.toArray().map((v) => +v.toFixed(2)),
@@ -319,12 +320,21 @@ function onHit() {
 function startFinish() {
   state = 'finishing';
   SK.stopMusic();
-  SK.fanfare();
-  burstConfetti();
-  setTimeout(showFinishScreen, 1400);
+  if (track.finale) {
+    /* космос: сверхновая и чёрная дыра, фанфары и конфетти — после зрелища */
+    SK.boom();
+    track.finale.start();
+    shake = 0.9;
+    setTimeout(showFinishScreen, 4300);
+  } else {
+    SK.fanfare();
+    burstConfetti();
+    setTimeout(showFinishScreen, 1400);
+  }
 }
 function showFinishScreen() {
   state = 'finish';
+  if (track.finale) SK.fanfare();
   const pct = track.totalSweets ? player.collected / track.totalSweets : 0;
   const stars = pct >= 0.9 ? 3 : pct >= 0.75 ? 2 : pct >= 0.5 ? 1 : 0;
   const saved = loadStars();
@@ -494,6 +504,9 @@ function update(dt) {
   /* HUD прогресс */
   $('progress-fill').style.width = Math.min(100, p.z / T.length * 100).toFixed(1) + '%';
 
+  /* финальная сцена (космос): планеты кружат вокруг солнца */
+  if (T.finale) T.finale.update(dt, elapsed);
+
   /* персонаж */
   kuromi.group.position.set(p.x, 0, p.z);
   kuromi.update({
@@ -533,12 +546,18 @@ function loop(time) {
     update(dt);
   } else if (state === 'finishing') {
     elapsed += dt;
-    /* добегаем сквозь арку, плавно замедляясь */
-    player.speed = Math.max(3, player.speed - 8 * dt);
+    /* добегаем сквозь арку; в космосе — плавно встаём в точку обзора сверхновой */
+    if (track.finale) {
+      const stopZ = track.length + 14;
+      player.speed = THREE.MathUtils.clamp((stopZ - player.z) * 1.6, 0, player.speed);
+    } else {
+      player.speed = Math.max(3, player.speed - 8 * dt);
+    }
     player.z += player.speed * dt;
     kuromi.group.position.set(player.x, 0, player.z);
     kuromi.group.visible = true;
     kuromi.update({ t: elapsed, y: 0, sliding: 0, airborne: false, laneVel: 0, runSpeed: player.speed });
+    if (track.finale) track.finale.update(dt, elapsed); // сверхновая → чёрная дыра
     $('progress-fill').style.width = '100%';
   }
   if (state !== 'menu') render(dt);

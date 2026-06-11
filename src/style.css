@@ -90,7 +90,7 @@ button {
 }
 #track-cards {
   display: flex; gap: 18px; flex-wrap: wrap; justify-content: center;
-  max-width: 980px;
+  max-width: 1240px;
 }
 .track-card {
   display: flex; flex-direction: column; align-items: center; gap: 6px;

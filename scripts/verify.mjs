@@ -22,7 +22,7 @@ await shot('01-menu');
 
 const cards = await page.locator('.track-card').count();
 console.log(`карточек трасс в меню: ${cards}`);
-if (cards !== 3) throw new Error('ожидалось 3 карточки трасс');
+if (cards !== 4) throw new Error('ожидалось 4 карточки трасс');
 
 /* старт самой короткой трассы */
 await page.click('.track-card[data-track="candy"]');

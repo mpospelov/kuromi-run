@@ -78,6 +78,37 @@ export const TrackKit = (function () {
       g.beginPath(); g.arc(88, 48, 46, 0, 7); g.fill();
     });
   }
+  function glowTex(inner, outer) { /* мягкое круглое сияние */
+    return canvasTex(128, 128, (g) => {
+      const gr = g.createRadialGradient(64, 64, 4, 64, 64, 62);
+      gr.addColorStop(0, inner);
+      gr.addColorStop(0.45, outer);
+      gr.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = gr; g.fillRect(0, 0, 128, 128);
+    });
+  }
+  function galaxyTex(tint) { /* спиральная галактика из точек */
+    return canvasTex(256, 256, (g) => {
+      const cx = 128, cy = 128;
+      const core = g.createRadialGradient(cx, cy, 2, cx, cy, 36);
+      core.addColorStop(0, '#fff8e8');
+      core.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = core; g.fillRect(0, 0, 256, 256);
+      for (let arm = 0; arm < 2; arm++) {
+        for (let i = 0; i < 130; i++) {
+          const tt = i / 130;
+          const ang = arm * Math.PI + tt * 3.6;
+          const r = 12 + tt * 105;
+          const x = cx + Math.cos(ang) * r + (Math.random() - 0.5) * 14;
+          const y = cy + Math.sin(ang) * r * 0.62 + (Math.random() - 0.5) * 14;
+          g.fillStyle = Math.random() < 0.65 ? tint : '#fff3df';
+          g.globalAlpha = (1 - tt) * 0.9;
+          g.beginPath(); g.arc(x, y, 1.1 + Math.random() * 1.8, 0, 7); g.fill();
+        }
+      }
+      g.globalAlpha = 1;
+    });
+  }
 
   /* ===== помощник: InstancedMesh из списка трансформаций ===== */
   const dummy = new THREE.Object3D();
@@ -127,7 +158,10 @@ export const TrackKit = (function () {
       grad: 'linear-gradient(160deg,#43306b,#7a4f9e 60%,#b86fae)' },
     { key: 'stars', name: 'Звёздное небо', sub: 'быстрая · 2 минуты', diff: 2,
       length: 2120, baseSpeed: 15.5, maxSpeed: 19.5, music: 'stars',
-      grad: 'linear-gradient(160deg,#241a4d,#4a3585 60%,#8a63c2)' }
+      grad: 'linear-gradient(160deg,#241a4d,#4a3585 60%,#8a63c2)' },
+    { key: 'space', name: 'Куроми в космосе', sub: 'космическая · 2,5 минуты', diff: 3,
+      length: 2600, baseSpeed: 16.5, maxSpeed: 21, music: 'space',
+      grad: 'linear-gradient(160deg,#0b0820,#1c1145 55%,#41217a)' }
   ];
 
   /* ===== паттерны предметов (всегда честные: есть свободный путь) ===== */
@@ -197,12 +231,13 @@ export const TrackKit = (function () {
   const WEIGHTS = [
     [0, 0, 1, 2, 2, 3, 4, 5, 6],          // конфетная: больше монет и прыжков
     [0, 1, 2, 2, 3, 4, 4, 5, 6, 6, 7],    // город
-    [0, 1, 2, 3, 4, 4, 5, 5, 6, 7, 7]     // звёзды
+    [0, 1, 2, 3, 4, 4, 5, 5, 6, 7, 7],    // звёзды
+    [0, 1, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7] // космос: плотнее всего
   ];
 
   function generateItems(def) {
     const items = [];
-    const gap = [11, 9, 8][def.diff];
+    const gap = [11, 9, 8, 7.5][def.diff];
     let z = 50;
     const w = WEIGHTS[def.diff];
     while (z < def.length - 70) {
@@ -432,8 +467,230 @@ export const TrackKit = (function () {
         st.position.y = 2.0; g.add(st);
         return g;
       }
+    },
+
+    space: {
+      sky: ['#05030f', '#140b2e', '#2a1656'],
+      fog: [0x140b2e, 40, 170],
+      road: 0x1a1238, dash: 0x9a86ff, shoulder: 0x322364, ground: null,
+      hemi: [0xbfb0ec, 0x141028, 0.95], sun: 0.5,
+      candyColor: 0xff8fc7, arch: [0xffd966, 0x9a86ff],
+      buildDecor(scene, L) {
+        /* небо: звёзды + спиральные галактики, следуют за камерой */
+        const skyGroup = new THREE.Group();
+        const starsN = 900, pos = new Float32Array(starsN * 3);
+        for (let i = 0; i < starsN; i++) {
+          pos[i * 3] = (Math.random() - 0.5) * 340;
+          pos[i * 3 + 1] = -10 + Math.random() * 130;
+          pos[i * 3 + 2] = 30 + Math.random() * 280;
+        }
+        const sg = new THREE.BufferGeometry();
+        sg.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+        skyGroup.add(new THREE.Points(sg, new THREE.PointsMaterial({ color: 0xfff6e0, size: 1.2, sizeAttenuation: true, fog: false })));
+        [['#ff9fce', -60, 55, 230, 38], ['#9fe8d8', 70, 40, 260, 30], ['#cabcf0', -45, 25, 180, 22]].forEach(([tint, x, y, z, s]) => {
+          const gal = new THREE.Sprite(new THREE.SpriteMaterial({ map: galaxyTex(tint), fog: false, transparent: true }));
+          gal.position.set(x, y, z);
+          gal.scale.set(s, s, 1);
+          skyGroup.add(gal);
+        });
+        scene.add(skyGroup);
+
+        /* врата галактик поперёк дороги — «перебегаем из галактики в галактику» */
+        const gateTints = [0xff8fc7, 0x9fe8d8, 0xffd966];
+        gateTints.forEach((tint, i) => {
+          const z = L * (0.25 + i * 0.25);
+          const gate = new THREE.Group();
+          const ring = new THREE.Mesh(
+            new THREE.TorusGeometry(4.6, 0.16, 10, 40),
+            new THREE.MeshLambertMaterial({ color: tint, emissive: tint, emissiveIntensity: 0.7 })
+          );
+          gate.add(ring);
+          const halo = new THREE.Sprite(new THREE.SpriteMaterial({
+            map: glowTex('rgba(255,255,255,0.55)', 'rgba(154,134,255,0.25)'), transparent: true, fog: false
+          }));
+          halo.scale.set(13, 13, 1);
+          gate.add(halo);
+          for (let k = 0; k < 6; k++) { // искорки по кольцу
+            const a = k * Math.PI / 3;
+            const spark = new THREE.Mesh(starGeom(0.22, 0.1, 0.08), new THREE.MeshBasicMaterial({ color: 0xfff3df }));
+            spark.position.set(Math.cos(a) * 4.6, Math.sin(a) * 4.6, 0);
+            gate.add(spark);
+          }
+          gate.position.set(0, 2.6, z);
+          scene.add(gate);
+          freeze(gate);
+        });
+
+        /* планеты с кольцами по обочинам */
+        const tints = [0xff9fce, 0x9fe8d8, 0xffd28a, 0xb98ae0, 0x8ad0ff];
+        const bodies = [], rings = [];
+        for (let z = 40; z < L - 60; z += 58) {
+          const s = (z / 58 | 0) % 2 ? 1 : -1;
+          const size = 1.1 + (z * 13 % 22) / 10;
+          const x = s * (9 + (z * 7 % 40) / 10), y = 2.5 + (z * 11 % 55) / 10;
+          bodies.push({ p: [x, y, z], s: size, c: tints[(z / 58 | 0) % tints.length] });
+          if ((z / 58 | 0) % 2 === 0) rings.push({ p: [x, y, z], r: [0.5, 0, 0.25], s: size });
+        }
+        inst(scene, new THREE.SphereGeometry(1, 16, 12), lam(0xffffff), bodies);
+        inst(scene, new THREE.TorusGeometry(1.7, 0.09, 6, 24), lam(0xcabcf0, { emissive: 0x4a3585, emissiveIntensity: 0.3 }), rings);
+
+        return { skyGroup: skyGroup, finale: buildSupernova(scene, L) };
+      },
+      low() { /* малый метеорит — перепрыгнуть */
+        const g = new THREE.Group();
+        const m = lam(0x8d8a99);
+        [[-0.45, 0.34, 0.3], [0.15, 0.42, 0.38], [0.55, 0.3, 0.26]].forEach((c) => {
+          const rock = new THREE.Mesh(new THREE.IcosahedronGeometry(c[2], 0), m);
+          rock.position.set(c[0], c[1], 0);
+          rock.rotation.set(c[0] * 5, c[1] * 7, 0);
+          g.add(rock);
+        });
+        const glow = new THREE.Sprite(new THREE.SpriteMaterial({
+          map: glowTex('rgba(255,154,61,0.5)', 'rgba(255,80,40,0.18)'), transparent: true
+        }));
+        glow.scale.set(2.4, 1.4, 1);
+        glow.position.y = 0.35;
+        g.add(glow);
+        return g;
+      },
+      bar(tex) { /* метеорный поток над головой — проскользить снизу */
+        const g = new THREE.Group();
+        const m = lam(0x6e6880);
+        for (let i = -3; i <= 3; i++) {
+          const rock = new THREE.Mesh(new THREE.IcosahedronGeometry(0.26 + (i % 2 ? 0.08 : 0), 0), m);
+          rock.position.set(i * 1.05, 1.6 + (i % 2 ? 0.14 : -0.08), 0);
+          rock.rotation.set(i * 2.1, i * 1.3, 0);
+          g.add(rock);
+        }
+        const beam = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.045, 0.045, 7.2, 6),
+          new THREE.MeshBasicMaterial({ color: 0xff9a3d, transparent: true, opacity: 0.55 })
+        );
+        beam.rotation.z = Math.PI / 2;
+        beam.position.y = 1.58;
+        g.add(beam);
+        const sign = new THREE.Mesh(new THREE.PlaneGeometry(0.66, 0.66), new THREE.MeshBasicMaterial({ map: tex, transparent: true }));
+        sign.position.set(0, 1.6, -0.45); sign.rotation.y = Math.PI; g.add(sign);
+        return g;
+      },
+      block() { /* большой астероид — объехать */
+        const g = new THREE.Group();
+        const big = new THREE.Mesh(new THREE.IcosahedronGeometry(0.8, 0), lam(0x6e6880));
+        big.scale.set(1, 1.45, 0.9);
+        big.position.y = 1.0;
+        big.rotation.set(0.5, 0.9, 0.2);
+        g.add(big);
+        const small = new THREE.Mesh(new THREE.IcosahedronGeometry(0.3, 0), lam(0x8d8a99));
+        small.position.set(0.55, 1.9, 0.1);
+        small.rotation.set(1.2, 0.4, 0);
+        g.add(small);
+        const glow = new THREE.Sprite(new THREE.SpriteMaterial({
+          map: glowTex('rgba(154,134,255,0.4)', 'rgba(154,134,255,0.12)'), transparent: true
+        }));
+        glow.scale.set(3, 3.4, 1);
+        glow.position.y = 1.2;
+        g.add(glow);
+        return g;
+      }
     }
   };
+
+  /* ===== финал космоса: солнце → сверхновая → чёрная дыра ===== */
+  function buildSupernova(scene, L) {
+    const g = new THREE.Group();
+    g.position.set(0, 6.5, L + 32);
+    scene.add(g);
+
+    const sun = new THREE.Mesh(new THREE.SphereGeometry(4.2, 24, 18), new THREE.MeshBasicMaterial({ color: 0xffd23f }));
+    g.add(sun);
+    const sunGlow = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: glowTex('rgba(255,224,130,0.95)', 'rgba(255,150,60,0.4)'), transparent: true, fog: false
+    }));
+    sunGlow.scale.set(22, 22, 1);
+    g.add(sunGlow);
+
+    /* планеты на солнечной орбите — их и всосёт */
+    const tints = [0xff9fce, 0x9fe8d8, 0xffd28a, 0xb98ae0, 0x8ad0ff, 0xfff3df];
+    const planets = tints.map((c, i) => {
+      const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.55 + (i % 3) * 0.25, 14, 10), lam(c, { emissive: c, emissiveIntensity: 0.25 }));
+      g.add(mesh);
+      return { mesh: mesh, r: 6.5 + i * 0.9, a: i * 1.05, speed: 0.25 + 0.6 / (1 + i * 0.4), tilt: (i % 3 - 1) * 0.18, dead: false };
+    });
+
+    /* ударная волна и чёрная дыра (скрыты до взрыва) */
+    const blast = new THREE.Mesh(
+      new THREE.TorusGeometry(1, 0.22, 8, 40),
+      new THREE.MeshBasicMaterial({ color: 0xfff3df, transparent: true })
+    );
+    blast.visible = false;
+    g.add(blast);
+    const hole = new THREE.Group();
+    const core = new THREE.Mesh(new THREE.SphereGeometry(1.7, 24, 18), new THREE.MeshBasicMaterial({ color: 0x000000 }));
+    hole.add(core);
+    const disk = new THREE.Mesh(
+      new THREE.TorusGeometry(2.6, 0.34, 10, 44),
+      new THREE.MeshBasicMaterial({ color: 0xff9a3d, transparent: true, opacity: 0.9 })
+    );
+    disk.rotation.x = 1.15;
+    hole.add(disk);
+    const holeGlow = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: glowTex('rgba(180,140,255,0.7)', 'rgba(120,60,220,0.3)'), transparent: true, fog: false
+    }));
+    holeGlow.scale.set(11, 11, 1);
+    hole.add(holeGlow);
+    hole.visible = false;
+    g.add(hole);
+
+    let t = -1; // -1 = взрыв ещё не начался
+    return {
+      start() { if (t < 0) t = 0; },
+      update(dt, time) {
+        if (t < 0) {
+          /* идл: солнце дышит, планеты кружат по орбитам */
+          const breathe = 1 + Math.sin(time * 1.6) * 0.04;
+          sun.scale.setScalar(breathe);
+          planets.forEach((p) => {
+            p.a += p.speed * dt;
+            p.mesh.position.set(Math.cos(p.a) * p.r, Math.sin(p.a) * p.r * p.tilt, Math.sin(p.a) * p.r * 0.55);
+          });
+          return;
+        }
+        t += dt;
+        /* фаза 1: вспышка — солнце раздувается и белеет */
+        if (t < 0.5) {
+          const k = t / 0.5;
+          sun.scale.setScalar(1 + k * 1.1);
+          sun.material.color.setRGB(1, 0.82 + k * 0.18, 0.25 + k * 0.75);
+          sunGlow.scale.setScalar(17 + k * 14);
+        } else {
+          /* фаза 2: коллапс солнца + ударная волна */
+          const k = Math.min(1, (t - 0.5) / 0.6);
+          sun.scale.setScalar(Math.max(0.001, 2.1 * (1 - k)));
+          sunGlow.scale.setScalar(Math.max(0.001, 31 * (1 - k)));
+          blast.visible = k < 1;
+          blast.scale.setScalar(1 + k * 24);
+          blast.material.opacity = 0.9 * (1 - k);
+        }
+        /* фаза 3: чёрная дыра растёт и вращает диск */
+        if (t > 0.9) {
+          hole.visible = true;
+          hole.scale.setScalar(Math.min(1, (t - 0.9) / 0.5));
+          disk.rotation.z += dt * 2.6;
+          holeGlow.material.opacity = 0.7 + Math.sin(time * 7) * 0.15;
+          /* планеты по спирали затягивает в дыру */
+          planets.forEach((p) => {
+            if (p.dead) return;
+            p.a += dt * (2.2 + 9 / Math.max(1, p.r));
+            p.r = Math.max(0, p.r - dt * (1.6 + (8 - p.r) * 0.45));
+            const s = Math.max(0.001, Math.min(1, p.r / 4));
+            p.mesh.scale.setScalar(s);
+            p.mesh.position.set(Math.cos(p.a) * p.r, Math.sin(p.a) * p.r * p.tilt * s, Math.sin(p.a) * p.r * 0.55);
+            if (p.r < 0.45) { p.dead = true; p.mesh.visible = false; }
+          });
+        }
+      }
+    };
+  }
 
   /* коллайдеры по типу препятствия */
   const COLLIDERS = {
@@ -479,7 +736,9 @@ export const TrackKit = (function () {
     }
     inst(scene, new THREE.BoxGeometry(0.09, 0.02, 1.4), new THREE.MeshBasicMaterial({ color: theme.dash }), dashes);
 
-    const skyGroup = theme.buildDecor(scene, L);
+    const dec = theme.buildDecor(scene, L);
+    const skyGroup = dec && dec.skyGroup !== undefined ? dec.skyGroup : dec;
+    const finale = dec && dec.finale ? dec.finale : null;
 
     /* финишная арка */
     const arch = new THREE.Group();
@@ -577,7 +836,7 @@ export const TrackKit = (function () {
     return {
       def: def, theme: theme, length: L, items: items,
       candyIM: candyIM, bonusPool: bonusPool, totalSweets: totalSweets,
-      skyGroup: skyGroup, laneX: LANE_X, zeroMatrix: zero
+      skyGroup: skyGroup, finale: finale, laneX: LANE_X, zeroMatrix: zero
     };
   }
 
