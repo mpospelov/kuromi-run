@@ -1,0 +1,25 @@
+import { chromium } from 'playwright';
+const browser = await chromium.launch();
+const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+const errors = [];
+page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
+page.on('pageerror', (e) => errors.push(String(e)));
+await page.goto('http://localhost:5199/', { waitUntil: 'networkidle' });
+await page.waitForTimeout(800);
+await page.click('.track-card[data-track="candy"]');
+await page.waitForTimeout(3800);
+await page.screenshot({ path: 'shots/m1-run.png' });
+await page.keyboard.press('ArrowUp');
+await page.waitForTimeout(280);
+await page.screenshot({ path: 'shots/m2-jump.png' });
+await page.keyboard.press('ArrowDown');
+await page.waitForTimeout(900);
+await page.screenshot({ path: 'shots/m3-slide.png' });
+/* празднование: разворот (0.5с) и подмигивание (1.0с) */
+await page.evaluate(() => window.__celebrate());
+await page.waitForTimeout(500);
+await page.screenshot({ path: 'shots/m4-turn.png' });
+await page.waitForTimeout(500);
+await page.screenshot({ path: 'shots/m5-wink.png' });
+console.log(errors.length ? 'ОШИБКИ:\n' + errors.join('\n') : 'ок');
+await browser.close();

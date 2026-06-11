@@ -52,19 +52,23 @@ await page.click('#btn-resume');
 await page.waitForTimeout(300);
 
 /* бежим до финиша; книжные переменки закрываем, первую фотографируем */
-let bookShots = 0, hudCountMax = 0;
+let bookShots = 0, hudCountMax = 0, stumbleShot = false, prevCount = 0;
 const t0 = Date.now();
-while (Date.now() - t0 < 150000) {
+while (Date.now() - t0 < 300000) {
   if (await visible('#finish')) break;
   if (await visible('#book-break')) {
     if (++bookShots === 1) await shot('06-book-break');
-    await page.click('#btn-book-continue');
+    await page.click('#btn-book-continue'); // ждёт разблокировки кнопки (~5 с)
   }
   const c = await page.evaluate(() => +document.getElementById('hud-count').textContent);
+  if (!stumbleShot && c < prevCount) { await shot('09-stumble'); stumbleShot = true; }
+  prevCount = c;
   hudCountMax = Math.max(hudCountMax, c);
-  await page.waitForTimeout(500);
+  await page.waitForTimeout(400);
 }
-if (!await visible('#finish')) throw new Error('финиш не наступил за 150 секунд');
+if (!await visible('#finish')) throw new Error('финиш не наступил за 300 секунд');
+const progress = await page.evaluate(() => document.getElementById('progress-fill').style.width);
+console.log('прогресс к финишу:', progress);
 await page.waitForTimeout(2300); // звёзды появляются по очереди
 await shot('07-finish');
 

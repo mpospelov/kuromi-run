@@ -1,130 +1,58 @@
-/* Kuromi Run — героиня из примитивов Three.js, процедурные анимации */
+/* Kuromi Run — героиня: 3D-модель (kuromi.glb) + процедурные анимации.
+   Модель статичная (без скелета), поэтому анимируем корпус целиком:
+   покачивание бега, наклоны, сквош подката — и празднование на 100 конфет:
+   разворот к камере с подмигиванием накладным «веком». */
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+
+const MODEL_URL = new URL('./assets/kuromi.glb', import.meta.url).href;
+
+/* координаты глаза, замеренные по модели (tools/face.js): лицо смотрит в +z */
+const EYE = { x: 0.16, y: 0.69, z: 0.30 };
+const CELEB_DUR = 2.0; // длительность празднования, сек
+
+let proto = null;
+export const kuromiReady = new GLTFLoader()
+  .setMeshoptDecoder(MeshoptDecoder)
+  .loadAsync(MODEL_URL)
+  .then((gltf) => {
+    const model = gltf.scene;
+    /* нормализация: высота 1.35, ножки на y=0, центр по x/z */
+    const box = new THREE.Box3().setFromObject(model);
+    const size = box.getSize(new THREE.Vector3());
+    model.scale.setScalar(1.35 / size.y);
+    const b2 = new THREE.Box3().setFromObject(model);
+    model.position.set(-(b2.min.x + b2.max.x) / 2, -b2.min.y, -(b2.min.z + b2.max.z) / 2);
+    proto = model;
+  });
 
 export function createKuromi() {
-  const M = {
-    black: new THREE.MeshLambertMaterial({ color: 0x2b2333 }),
-    white: new THREE.MeshLambertMaterial({ color: 0xfffaf5 }),
-    pink:  new THREE.MeshLambertMaterial({ color: 0xff8fc7 }),
-    deepPink: new THREE.MeshLambertMaterial({ color: 0xf06fb0 }),
-    dark:  new THREE.MeshLambertMaterial({ color: 0x1c1722 }),
-    blush: new THREE.MeshLambertMaterial({ color: 0xffb3d6, transparent: true, opacity: 0.85 })
-  };
+  if (!proto) throw new Error('Модель Куроми ещё не загружена (await kuromiReady)');
 
-  const root = new THREE.Group();      // позиция в мире (ставит игра)
-  const rig = new THREE.Group();       // наклоны корпуса (подкат, полосы)
+  const root = new THREE.Group();   // позиция в мире (ставит игра)
+  const rig = new THREE.Group();    // наклоны/сквош/развороты корпуса
   root.add(rig);
-  rig.rotation.y = Math.PI;            // лицом вперёд (+z)
+  rig.add(proto.clone(true));       // геометрия и материалы общие между забегами
 
-  /* --- тело --- */
-  const body = new THREE.Mesh(new THREE.SphereGeometry(0.3, 20, 16), M.black);
-  body.scale.set(1, 1.12, 0.88);
-  body.position.y = 0.52;
-  rig.add(body);
-
-  const belly = new THREE.Mesh(new THREE.SphereGeometry(0.19, 16, 12), M.white);
-  belly.scale.set(1, 1.05, 0.55);
-  belly.position.set(0, 0.5, -0.18);
-  rig.add(belly);
-
-  /* --- голова --- */
-  const head = new THREE.Group();
-  head.position.y = 1.04;
-  rig.add(head);
-
-  const face = new THREE.Mesh(new THREE.SphereGeometry(0.34, 24, 18), M.white);
-  face.scale.set(1, 0.92, 0.9);
-  head.add(face);
-
-  const hood = new THREE.Mesh(new THREE.SphereGeometry(0.4, 24, 18), M.black);
-  hood.position.set(0, 0.07, 0.07);
-  hood.scale.set(1.03, 0.93, 0.96);
-  head.add(hood);
-
-  /* ушки — длинные, чуть в стороны */
-  const ears = [];
-  [-1, 1].forEach((s) => {
-    const ear = new THREE.Group();
-    ear.position.set(0.2 * s, 0.32, 0.06);
-    const earMesh = new THREE.Mesh(new THREE.SphereGeometry(0.125, 14, 12), M.black);
-    earMesh.scale.set(1, 2.7, 0.9);
-    earMesh.position.y = 0.26;
-    ear.add(earMesh);
-    const tip = new THREE.Mesh(new THREE.SphereGeometry(0.06, 10, 8), M.pink);
-    tip.position.set(0, 0.52, -0.06);
-    ear.add(tip);
-    ear.rotation.z = -0.38 * s;
-    head.add(ear);
-    ears.push(ear);
-  });
-
-  /* розовая черепушка спереди на колпаке */
-  const skull = new THREE.Group();
-  skull.position.set(0, 0.26, -0.33);
-  skull.rotation.x = -0.35;
-  const sHead = new THREE.Mesh(new THREE.SphereGeometry(0.095, 14, 12), M.pink);
-  sHead.scale.set(1, 0.9, 0.65);
-  skull.add(sHead);
-  const sJaw = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.045, 0.05), M.pink);
-  sJaw.position.set(0, -0.085, -0.01);
-  skull.add(sJaw);
-  [-1, 1].forEach((s) => {
-    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.022, 8, 6), M.dark);
-    eye.position.set(0.035 * s, 0.005, -0.062);
-    skull.add(eye);
-  });
-  head.add(skull);
-
-  /* глазки, носик, щёчки */
-  [-1, 1].forEach((s) => {
-    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.05, 12, 10), M.dark);
-    eye.scale.set(0.85, 1.25, 0.6);
-    eye.position.set(0.135 * s, 0.0, -0.295);
-    head.add(eye);
-    const glint = new THREE.Mesh(new THREE.SphereGeometry(0.015, 8, 6), M.white);
-    glint.position.set(0.12 * s, 0.035, -0.335);
-    head.add(glint);
-    const cheek = new THREE.Mesh(new THREE.SphereGeometry(0.045, 10, 8), M.blush);
-    cheek.scale.set(1, 0.65, 0.4);
-    cheek.position.set(0.21 * s, -0.1, -0.26);
-    head.add(cheek);
-  });
-  const nose = new THREE.Mesh(new THREE.SphereGeometry(0.032, 10, 8), M.deepPink);
-  nose.scale.set(1.1, 0.85, 0.7);
-  nose.position.set(0, -0.075, -0.33);
-  head.add(nose);
-
-  /* ручки */
-  const arms = [];
-  [-1, 1].forEach((s) => {
-    const arm = new THREE.Mesh(new THREE.SphereGeometry(0.085, 12, 10), M.white);
-    arm.position.set(0.3 * s, 0.6, 0);
-    rig.add(arm);
-    arms.push(arm);
-  });
-
-  /* ножки */
-  const feet = [];
-  [-1, 1].forEach((s) => {
-    const foot = new THREE.Mesh(new THREE.SphereGeometry(0.1, 12, 10), M.black);
-    foot.scale.set(0.9, 0.75, 1.25);
-    foot.position.set(0.13 * s, 0.1, 0);
-    rig.add(foot);
-    feet.push(foot);
-  });
-
-  /* хвостик чёртика */
-  const tail = new THREE.Group();
-  tail.position.set(0, 0.5, 0.26);
-  const tailStem = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.03, 0.34, 8), M.dark);
-  tailStem.rotation.x = -0.9;
-  tailStem.position.set(0, 0.08, 0.12);
-  tail.add(tailStem);
-  const tailTip = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.12, 4), M.dark);
-  tailTip.position.set(0, 0.24, 0.22);
-  tailTip.rotation.x = 0.5;
-  tail.add(tailTip);
-  rig.add(tail);
+  /* «веко» подмигивания: лепесток в цвет мордочки + дуга-ресничка ∪ */
+  const wink = new THREE.Group();
+  const lid = new THREE.Mesh(
+    new THREE.SphereGeometry(0.085, 16, 12),
+    new THREE.MeshLambertMaterial({ color: 0xf5edf2 })
+  );
+  lid.scale.set(1, 1, 0.3);
+  wink.add(lid);
+  const lash = new THREE.Mesh(
+    new THREE.TorusGeometry(0.055, 0.013, 8, 24, Math.PI * 0.8),
+    new THREE.MeshBasicMaterial({ color: 0x1c1722 })
+  );
+  lash.position.z = 0.022;
+  lash.rotation.z = Math.PI + (Math.PI - Math.PI * 0.8) / 2; // дуга открыта вверх: ∪
+  wink.add(lash);
+  wink.position.set(EYE.x, EYE.y, EYE.z);
+  wink.visible = false;
+  rig.add(wink);
 
   /* мягкая «блинная» тень */
   const shadow = new THREE.Mesh(
@@ -136,49 +64,46 @@ export function createKuromi() {
   root.add(shadow);
 
   /* --- процедурная анимация --- */
-  // state: { y, sliding (0..1), airborne, laneVel, runSpeed, t }
+  // state: { t, y, sliding (0..1), airborne, laneVel, runSpeed,
+  //          stumble (0..1), squash (0..1), celebrate (сек с начала, иначе -1) }
   function update(state) {
     const t = state.t;
     const runPhase = t * (7 + state.runSpeed * 0.35);
     const slide = state.sliding;
     const air = state.airborne ? 1 : 0;
+    const st = state.stumble || 0;
+    const sq = state.squash || 0;
 
-    rig.position.y = state.y + Math.max(0, Math.sin(runPhase * 2)) * 0.045 * (1 - air) * (1 - slide);
+    /* подскок бега */
+    rig.position.y = state.y + Math.max(0, Math.sin(runPhase * 2)) * 0.06 * (1 - air) * (1 - slide);
 
-    /* наклон корпуса: вперёд при подкате, в сторону при смене полосы */
-    rig.rotation.x = 0.12 + slide * 1.05 + air * -0.12;
-    rig.rotation.z = THREE.MathUtils.clamp(-state.laneVel * 0.055, -0.35, 0.35);
-    rig.scale.y = 1 - slide * 0.32;
-    rig.scale.x = 1 + slide * 0.12;
+    /* наклоны: вперёд при подкате, назад в прыжке и при спотыкании,
+       вбок при смене полосы, плюс лёгкое переваливание с ноги на ногу */
+    rig.rotation.x = 0.1 + slide * 0.95 + air * -0.16 - st * 0.5;
+    rig.rotation.z =
+      THREE.MathUtils.clamp(-state.laneVel * 0.055, -0.35, 0.35) +
+      Math.sin(runPhase) * 0.06 * (1 - air) * (1 - slide) +
+      Math.sin(t * 26) * 0.2 * st; // дрожь от удара
 
-    /* ножки: бег / поджаты в прыжке / вытянуты в подкате */
-    feet.forEach((foot, i) => {
-      const ph = runPhase + i * Math.PI;
-      const run = (1 - air) * (1 - slide);
-      foot.position.z = Math.sin(ph) * 0.2 * run - slide * 0.15;
-      foot.position.y = 0.1 + Math.max(0, Math.cos(ph)) * 0.09 * run + air * 0.22 + slide * 0.05;
-      foot.rotation.x = Math.sin(ph) * 0.5 * run;
-    });
+    /* сквош: в подкате и коротко при приземлении */
+    rig.scale.y = (1 - slide * 0.35) * (1 - sq * 0.16);
+    rig.scale.x = (1 + slide * 0.12) * (1 + sq * 0.12);
+    rig.scale.z = 1 + slide * 0.08;
 
-    /* ручки машут противофазой, в прыжке подняты */
-    arms.forEach((arm, i) => {
-      const ph = runPhase + (1 - i) * Math.PI;
-      arm.position.z = Math.sin(ph) * 0.16 * (1 - air);
-      arm.position.y = 0.6 + air * 0.18 + Math.max(0, Math.cos(ph)) * 0.04;
-    });
-
-    /* ушки пружинят, в прыжке взлетают */
-    ears.forEach((ear, i) => {
-      const s = i === 0 ? -1 : 1;
-      ear.rotation.z = -0.38 * s + Math.sin(runPhase + i) * 0.07 + air * 0.3 * s * -1;
-      ear.rotation.x = -air * 0.35 + Math.sin(runPhase * 2) * 0.05 * (1 - air);
-    });
-
-    /* хвостик виляет */
-    tail.rotation.y = Math.sin(t * 9) * 0.4;
-
-    /* голова чуть кивает */
-    head.rotation.x = Math.sin(runPhase * 2) * 0.035 * (1 - air) + slide * -0.5;
+    /* празднование: разворот к камере + подмигивание */
+    const ph = state.celebrate == null ? -1 : state.celebrate;
+    if (ph >= 0 && ph < CELEB_DUR) {
+      const turn = Math.min(
+        THREE.MathUtils.smoothstep(ph, 0, 0.45),
+        1 - THREE.MathUtils.smoothstep(ph, 1.55, CELEB_DUR)
+      );
+      rig.rotation.y = Math.PI * turn;
+      rig.rotation.z += 0.14 * turn;            // кокетливый наклон
+      wink.visible = ph > 0.65 && ph < 1.45;
+    } else {
+      rig.rotation.y = 0;
+      wink.visible = false;
+    }
 
     /* тень: на земле плотнее, в прыжке шире и бледнее */
     const h = state.y;

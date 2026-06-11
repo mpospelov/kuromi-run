@@ -1,0 +1,11 @@
+import { chromium } from 'playwright';
+const browser = await chromium.launch();
+const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+page.on('console', (m) => console.log('[' + m.type() + ']', m.text().slice(0, 300)));
+page.on('pageerror', (e) => console.log('[pageerror]', String(e).slice(0, 300)));
+await page.goto('http://localhost:5199/', { waitUntil: 'networkidle' });
+await page.waitForTimeout(800);
+await page.click('.track-card[data-track="candy"]');
+await page.waitForTimeout(4000);
+console.log(JSON.stringify(await page.evaluate(() => window.__debug())));
+await browser.close();

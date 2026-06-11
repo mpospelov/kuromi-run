@@ -45,6 +45,8 @@ button {
   transition: transform 0.08s ease;
 }
 .big-btn:active { transform: translateY(4px); box-shadow: 0 1px 0 var(--pink-deep); }
+.big-btn:disabled { opacity: 0.5; cursor: default; }
+.big-btn:disabled:active { transform: none; box-shadow: 0 5px 0 var(--pink-deep), 0 10px 24px rgba(43,35,51,0.25); }
 .big-btn.alt { background: var(--purple); box-shadow: 0 5px 0 var(--purple-deep), 0 10px 24px rgba(43,35,51,0.25); }
 .big-btn.alt:active { box-shadow: 0 1px 0 var(--purple-deep); }
 

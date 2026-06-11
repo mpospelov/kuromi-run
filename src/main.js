@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { SoundKit as SK } from './audio.js';
 import { TrackKit as TK } from './tracks.js';
-import { createKuromi } from './kuromi.js';
+import { createKuromi, kuromiReady } from './kuromi.js';
 import './style.css';
 
 const LANE_X = TK.LANE_X;
@@ -89,8 +89,10 @@ function renderMenu() {
 }
 
 /* ===== запуск забега ===== */
-function startRun(key) {
+async function startRun(key) {
   SK.tap();
+  await kuromiReady;
+  if (kuromi) scene.remove(kuromi.group); // модель общая — не отдаём её disposeScene
   TK.disposeScene(scene);
   track = TK.buildTrack(scene, key);
   kuromi = createKuromi();
@@ -99,7 +101,10 @@ function startRun(key) {
   player = {
     lane: 1, x: 0, y: 0, vy: 0, z: 0,
     airborne: false, slideT: 0, slideOnLand: false,
-    invuln: 0, collected: 0, laneVel: 0, speed: track.def.baseSpeed
+    invuln: 0, collected: 0, celebT: 0,
+    laneV: 0,                          // скорость пружины перестроения
+    stumbleT: 0, landT: 0,             // спотыкание и сквош приземления
+    speed: track.def.baseSpeed * 0.5   // стартуем с разгона
   };
   itemLo = 0; elapsed = 0; hitCount = 0; shake = 0;
   $('hud-count').textContent = '0';
@@ -218,6 +223,8 @@ function goMenu() {
 }
 
 /* ===== книжная переменка (каждое 3-е столкновение) ===== */
+const BOOK_LOCK = 5; // секунд до разблокировки кнопки — переменку нельзя проскочить
+let bookTimer = null;
 function showBookBreak() {
   state = 'book';
   SK.stopMusic();
@@ -226,6 +233,21 @@ function showBookBreak() {
   $('book-author').textContent = b.a;
   $('book-title').textContent = b.t;
   $('book-desc').textContent = b.d;
+  const btn = $('btn-book-continue');
+  let left = BOOK_LOCK;
+  btn.disabled = true;
+  btn.textContent = 'Бежать дальше! (' + left + ')';
+  clearInterval(bookTimer);
+  bookTimer = setInterval(() => {
+    left--;
+    if (left <= 0) {
+      clearInterval(bookTimer); bookTimer = null;
+      btn.disabled = false;
+      btn.textContent = 'Бежать дальше!';
+    } else {
+      btn.textContent = 'Бежать дальше! (' + left + ')';
+    }
+  }, 1000);
   showOverlay('book', true);
 }
 $('btn-book-continue').addEventListener('click', () => {
@@ -233,13 +255,33 @@ $('btn-book-continue').addEventListener('click', () => {
   if (state === 'book') { state = 'playing'; SK.startMusic(track.def.music); }
 });
 
-/* ===== столкновение ===== */
+/* ===== сладости: зачисление + праздник на каждой сотне ===== */
+const CELEB_DUR = 2.0;
+function addSweets(n) {
+  const before = player.collected;
+  player.collected += n;
+  $('hud-count').textContent = player.collected;
+  if (Math.floor(player.collected / 100) > Math.floor(before / 100)) {
+    player.celebT = CELEB_DUR; // Куроми оборачивается и подмигивает
+    SK.starPop(2);
+  }
+}
+window.__celebrate = () => { if (player) player.celebT = CELEB_DUR; }; // для отладки/тестов
+window.__debug = () => ({
+  state, children: scene.children.length,
+  cam: camera.position.toArray().map((v) => +v.toFixed(2)),
+  player: player ? { x: +player.x.toFixed(2), z: +player.z.toFixed(2) } : null,
+  drawn: renderer.info.render.calls, tris: renderer.info.render.triangles
+});
+
+/* ===== столкновение: Куроми спотыкается, останавливается и роняет конфеты ===== */
 function onHit() {
   if (player.invuln > 0) return;
   player.invuln = 2;
+  player.stumbleT = 0.9; // цель скорости → 0, затем плавный разгон
   shake = 0.45;
   SK.thud();
-  /* рассыпаем конфеты — их можно тут же подобрать */
+  /* конфеты вылетают из Куроми дугами и падают на дорогу впереди */
   const n = Math.min(player.collected, 5);
   if (n > 0) {
     player.collected -= n;
@@ -249,15 +291,19 @@ function onHit() {
       if (placed >= n) break;
       if (b.active) continue;
       b.active = true;
-      b.lane = Math.floor(Math.random() * 3);
-      b.x = LANE_X[b.lane] + (Math.random() - 0.5) * 0.6;
-      b.z = player.z + 4 + placed * 2.2 + Math.random() * 1.2;
-      b.y = 0.55;
+      b.x = player.x;
+      b.y = 1.0;
+      b.z = player.z + 0.3;
+      b.fly = {
+        vx: (Math.random() - 0.5) * 5,
+        vy: 4.5 + Math.random() * 2.5,
+        vz: 3.5 + Math.random() * 3.5
+      };
       placed++;
     }
   }
   hitCount++;
-  if (hitCount % 3 === 0) setTimeout(() => { if (state === 'playing') showBookBreak(); }, 650);
+  if (hitCount % 3 === 0) setTimeout(() => { if (state === 'playing') showBookBreak(); }, 1200);
 }
 
 /* ===== финиш ===== */
@@ -333,16 +379,17 @@ const tmpO = new THREE.Object3D();
 
 function update(dt) {
   const p = player, T = track;
-  /* скорость растёт очень плавно, с потолком */
+  /* скорость: цель растёт очень плавно, сам разгон/торможение — с инерцией;
+     при спотыкании цель = 0 (полная остановка) */
   const prog = Math.min(1, p.z / T.length * 1.4);
-  p.speed = T.def.baseSpeed + (T.def.maxSpeed - T.def.baseSpeed) * prog;
+  const targetSpeed = p.stumbleT > 0 ? 0 : T.def.baseSpeed + (T.def.maxSpeed - T.def.baseSpeed) * prog;
+  p.speed += THREE.MathUtils.clamp(targetSpeed - p.speed, -34 * dt, 6.5 * dt);
   p.z += p.speed * dt;
 
-  /* полосы */
+  /* полосы: пружина с лёгким перелётом — движение «живое», не телепорт */
   const tx = LANE_X[p.lane];
-  const oldX = p.x;
-  p.x += (tx - p.x) * Math.min(1, dt * 11);
-  p.laneVel = (p.x - oldX) / Math.max(dt, 0.001);
+  p.laneV += ((tx - p.x) * 60 - p.laneV * 10.5) * dt;
+  p.x += p.laneV * dt;
 
   /* прыжок */
   if (p.airborne) {
@@ -350,11 +397,15 @@ function update(dt) {
     p.y += p.vy * dt;
     if (p.y <= 0) {
       p.y = 0; p.vy = 0; p.airborne = false;
+      p.landT = 0.16; // сквош при приземлении
       if (p.slideOnLand) { p.slideT = 0.55; p.slideOnLand = false; SK.swish(); }
     }
   }
   if (p.slideT > 0) p.slideT -= dt;
   if (p.invuln > 0) p.invuln -= dt;
+  if (p.celebT > 0) p.celebT -= dt;
+  if (p.stumbleT > 0) p.stumbleT -= dt;
+  if (p.landT > 0) p.landT -= dt;
 
   const sliding = p.slideT > 0 ? 1 : 0;
   const pBot = p.y, pTop = p.y + (sliding ? 0.68 : 1.42);
@@ -386,8 +437,7 @@ function update(dt) {
         /* сбор */
         if (Math.abs(dz) < 1.0 && Math.abs(it.x - p.x) < 0.95 && Math.abs(it.y - (p.y + 0.7)) < 1.05) {
           it.taken = true;
-          p.collected += it.value;
-          $('hud-count').textContent = p.collected;
+          addSweets(it.value);
           if (it.kind === 'skull') { SK.dingBig(); if (it.mesh) it.mesh.visible = false; }
           else {
             SK.ding();
@@ -396,27 +446,36 @@ function update(dt) {
           }
         }
       }
-    } else if (p.invuln <= 0 && Math.abs(dz) < 0.65 + p.speed * dt) {
+    } else if (p.invuln <= 0 && p.celebT <= 0 && Math.abs(dz) < 0.65 + p.speed * dt) {
+      /* пока Куроми подмигивает в камеру, она «не смотрит» — столкновения не считаем */
       /* препятствие: пересечение по x и по высоте */
       const halfW = it.w / 2 + 0.28;
       if (Math.abs(it.x - p.x) < halfW && it.yBot < pTop && it.yTop > pBot) onHit();
     }
   }
 
-  /* бонусные конфеты */
+  /* бонусные конфеты (рассыпанные при ударе) */
   for (const b of T.bonusPool) {
     if (!b.active) continue;
     if (b.z < p.z - 4) { b.active = false; T.candyIM.setMatrixAt(b.iid, T.zeroMatrix); dirtyCandy = true; continue; }
-    tmpO.position.set(b.x, b.y + Math.sin(elapsed * 4 + b.z) * 0.08, b.z);
-    tmpO.rotation.set(0, elapsed * 3, 0);
+    if (b.fly) {
+      /* полёт дугой после удара */
+      b.fly.vy -= 18 * dt;
+      b.x = THREE.MathUtils.clamp(b.x + b.fly.vx * dt, -3.1, 3.1);
+      b.y += b.fly.vy * dt;
+      b.z += b.fly.vz * dt;
+      if (b.y <= 0.55 && b.fly.vy < 0) { b.y = 0.55; b.fly = null; }
+    }
+    tmpO.position.set(b.x, b.y + (b.fly ? 0 : Math.sin(elapsed * 4 + b.z) * 0.08), b.z);
+    tmpO.rotation.set(0, elapsed * (b.fly ? 7 : 3), 0);
     tmpO.scale.set(1.15, 1.15, 1.15);
     tmpO.updateMatrix();
     T.candyIM.setMatrixAt(b.iid, tmpO.matrix);
     dirtyCandy = true;
-    if (Math.abs(b.z - p.z) < 1.0 && Math.abs(b.x - p.x) < 0.95 && p.y < 1.2) {
+    /* подобрать можно после приземления */
+    if (!b.fly && Math.abs(b.z - p.z) < 1.0 && Math.abs(b.x - p.x) < 0.95 && p.y < 1.2) {
       b.active = false;
-      p.collected += 1;
-      $('hud-count').textContent = p.collected;
+      addSweets(1);
       SK.ding();
       T.candyIM.setMatrixAt(b.iid, T.zeroMatrix);
     }
@@ -428,9 +487,15 @@ function update(dt) {
 
   /* персонаж */
   kuromi.group.position.set(p.x, 0, p.z);
-  kuromi.update({ t: elapsed, y: p.y, sliding: sliding, airborne: p.airborne, laneVel: p.laneVel, runSpeed: p.speed });
-  /* мигание неуязвимости */
-  kuromi.group.visible = p.invuln <= 0 || Math.floor(elapsed * 12) % 2 === 0;
+  kuromi.update({
+    t: elapsed, y: p.y, sliding: sliding, airborne: p.airborne,
+    laneVel: p.laneV, runSpeed: p.speed,
+    stumble: p.stumbleT > 0 ? Math.min(1, p.stumbleT / 0.55) : 0,
+    squash: p.landT > 0 ? p.landT / 0.16 : 0,
+    celebrate: p.celebT > 0 ? CELEB_DUR - p.celebT : -1
+  });
+  /* мигание неуязвимости (кроме празднования — там Куроми всегда видна) */
+  kuromi.group.visible = p.celebT > 0 || p.invuln <= 0 || Math.floor(elapsed * 12) % 2 === 0;
 
   /* финиш */
   if (p.z >= T.length && state === 'playing') startFinish();
