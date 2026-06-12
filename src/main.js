@@ -501,6 +501,14 @@ function update(dt) {
   }
   if (dirtyCandy) T.candyIM.instanceMatrix.needsUpdate = true;
 
+  /* летящие метеоры с огненным шлейфом (космос) */
+  if (T.hazards) {
+    T.hazards.update(dt, elapsed, {
+      x: p.x, z: p.z, bot: pBot, top: pTop,
+      canHit: p.invuln <= 0 && p.celebT <= 0
+    }, onHit);
+  }
+
   /* HUD прогресс */
   $('progress-fill').style.width = Math.min(100, p.z / T.length * 100).toFixed(1) + '%';
 

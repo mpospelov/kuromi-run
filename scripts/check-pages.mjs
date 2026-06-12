@@ -1,0 +1,16 @@
+import { chromium } from 'playwright';
+const browser = await chromium.launch();
+const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+const errors = [];
+page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
+page.on('pageerror', (e) => errors.push(String(e)));
+await page.goto('https://mpospelov.github.io/kuromi-run/', { waitUntil: 'networkidle' });
+await page.waitForTimeout(1000);
+await page.screenshot({ path: 'shots/pages-menu.png' });
+await page.click('.track-card[data-track="candy"]');
+await page.waitForTimeout(4200);
+await page.screenshot({ path: 'shots/pages-run.png' });
+const hud = await page.evaluate(() => document.getElementById('hud').classList.contains('visible'));
+console.log('HUD виден:', hud);
+console.log(errors.length ? 'ОШИБКИ:\n' + errors.join('\n') : 'ошибок консоли нет');
+await browser.close();

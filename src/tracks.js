@@ -536,23 +536,9 @@ export const TrackKit = (function () {
 
         return { skyGroup: skyGroup, finale: buildSupernova(scene, L) };
       },
-      low() { /* малый метеорит — перепрыгнуть */
-        const g = new THREE.Group();
-        const m = lam(0x8d8a99);
-        [[-0.45, 0.34, 0.3], [0.15, 0.42, 0.38], [0.55, 0.3, 0.26]].forEach((c) => {
-          const rock = new THREE.Mesh(new THREE.IcosahedronGeometry(c[2], 0), m);
-          rock.position.set(c[0], c[1], 0);
-          rock.rotation.set(c[0] * 5, c[1] * 7, 0);
-          g.add(rock);
-        });
-        const glow = new THREE.Sprite(new THREE.SpriteMaterial({
-          map: glowTex('rgba(255,154,61,0.5)', 'rgba(255,80,40,0.18)'), transparent: true
-        }));
-        glow.scale.set(2.4, 1.4, 1);
-        glow.position.y = 0.35;
-        g.add(glow);
-        return g;
-      },
+      /* low и block здесь не статичные: их места превращаются в летящие метеоры
+         (makeHazards ниже) — навстречу игроку, с огненным шлейфом на дороге */
+      makeHazards: makeMeteorHazards,
       bar(tex) { /* метеорный поток над головой — проскользить снизу */
         const g = new THREE.Group();
         const m = lam(0x6e6880);
@@ -573,27 +559,119 @@ export const TrackKit = (function () {
         sign.position.set(0, 1.6, -0.45); sign.rotation.y = Math.PI; g.add(sign);
         return g;
       },
-      block() { /* большой астероид — объехать */
-        const g = new THREE.Group();
-        const big = new THREE.Mesh(new THREE.IcosahedronGeometry(0.8, 0), lam(0x6e6880));
-        big.scale.set(1, 1.45, 0.9);
-        big.position.y = 1.0;
-        big.rotation.set(0.5, 0.9, 0.2);
-        g.add(big);
-        const small = new THREE.Mesh(new THREE.IcosahedronGeometry(0.3, 0), lam(0x8d8a99));
-        small.position.set(0.55, 1.9, 0.1);
-        small.rotation.set(1.2, 0.4, 0);
-        g.add(small);
-        const glow = new THREE.Sprite(new THREE.SpriteMaterial({
-          map: glowTex('rgba(154,134,255,0.4)', 'rgba(154,134,255,0.12)'), transparent: true
-        }));
-        glow.scale.set(3, 3.4, 1);
-        glow.position.y = 1.2;
-        g.add(glow);
-        return g;
-      }
     }
   };
+
+  /* ===== космос: летящие метеоры с огненным шлейфом =====
+     Точки low/block из паттернов становятся метеорами: метеор летит навстречу
+     игроку вдоль своей полосы, прижимаясь к дороге, и оставляет за собой
+     горящие лужицы — на них нельзя наступать (но можно перепрыгнуть).
+     Малый метеор перепрыгивается, большой — только объезжать. */
+  function makeMeteorHazards(scene) {
+    const refs = [];
+    const fireTex = glowTex('rgba(255,220,120,0.95)', 'rgba(255,90,30,0.45)');
+
+    /* пул метеоров (одновременно в полёте немного) */
+    const meteors = [];
+    for (let i = 0; i < 6; i++) {
+      const g = new THREE.Group();
+      const rock = new THREE.Mesh(new THREE.IcosahedronGeometry(1, 0), lam(0x5e5870, { emissive: 0xff5a1e, emissiveIntensity: 0.3 }));
+      g.add(rock);
+      const flame = new THREE.Sprite(new THREE.SpriteMaterial({ map: fireTex, transparent: true }));
+      g.add(flame);
+      const tail = [];
+      for (let k = 0; k < 3; k++) {
+        const t = new THREE.Sprite(new THREE.SpriteMaterial({ map: fireTex, transparent: true, opacity: 0.5 - k * 0.13 }));
+        t.position.set(0, 0.35 + k * 0.55, 1.1 + k * 1.05); // хвост назад и вверх
+        t.scale.set(1.7 - k * 0.4, 1.7 - k * 0.4, 1);
+        g.add(t);
+        tail.push(t);
+      }
+      g.visible = false;
+      scene.add(g);
+      meteors.push({ g, rock, flame, busy: false, big: false, x: 0, y: 5, z: 0, dropAcc: 0 });
+    }
+
+    /* пул горящих лужиц */
+    const patches = [];
+    const scorchGeo = new THREE.CircleGeometry(0.55, 12);
+    for (let i = 0; i < 36; i++) {
+      const pg = new THREE.Group();
+      const scorch = new THREE.Mesh(scorchGeo, new THREE.MeshBasicMaterial({ color: 0x1c1020, transparent: true, opacity: 0.85 }));
+      scorch.rotation.x = -Math.PI / 2;
+      scorch.position.y = 0.02;
+      pg.add(scorch);
+      const fl = new THREE.Sprite(new THREE.SpriteMaterial({ map: fireTex, transparent: true }));
+      fl.position.y = 0.5;
+      pg.add(fl);
+      pg.visible = false;
+      scene.add(pg);
+      patches.push({ g: pg, fl, life: 0, x: 0, z: 0 });
+    }
+
+    return {
+      addRef(r) { refs.push(r); },
+      /* pl: { x, z, bot, top, canHit }; hit() — столкновение */
+      update(dt, time, pl, hit) {
+        /* активация: метеор стартует, когда игрок в ~95 м от точки паттерна */
+        for (const r of refs) {
+          if (r.used) continue;
+          const ahead = r.z - pl.z;
+          if (ahead > 95 || ahead < 20) continue;
+          const m = meteors.find((mm) => !mm.busy);
+          if (!m) break;
+          r.used = true;
+          m.busy = true;
+          m.big = r.big;
+          m.x = r.x;
+          m.y = 5.5;
+          m.z = r.z + 40;
+          m.dropAcc = 0;
+          const s = r.big ? 0.85 : 0.45;
+          m.rock.scale.setScalar(s);
+          m.flame.scale.set(r.big ? 4.2 : 2.6, r.big ? 4.2 : 2.6, 1);
+          m.g.visible = true;
+        }
+        /* полёт: навстречу (−z), со снижением к дороге */
+        for (const m of meteors) {
+          if (!m.busy) continue;
+          m.z -= 11 * dt;
+          const targetY = m.big ? 1.1 : 0.62;
+          m.y += (targetY - m.y) * Math.min(1, dt * 2.2);
+          m.rock.rotation.x += dt * 5;
+          m.rock.rotation.y += dt * 3;
+          m.g.position.set(m.x, m.y, m.z);
+          /* шлейф: лужица каждые ~1.7 м пути, но не у самых ног игрока */
+          m.dropAcc += 11 * dt;
+          if (m.dropAcc > 1.7 && m.y < 1.8 && m.z > pl.z + 4) {
+            m.dropAcc = 0;
+            const p2 = patches.find((pp) => pp.life <= 0);
+            if (p2) {
+              p2.life = 2.4;
+              p2.x = m.x;
+              p2.z = m.z + 0.6;
+              p2.g.position.set(p2.x, 0, p2.z);
+              p2.g.visible = true;
+            }
+          }
+          /* столкновение с самим метеором */
+          const top = m.y + (m.big ? 1.3 : 0.5), bot = m.y - (m.big ? 1.0 : 0.45);
+          if (pl.canHit && Math.abs(m.z - pl.z) < 0.8 && Math.abs(m.x - pl.x) < 0.95 && bot < pl.top && top > pl.bot) hit();
+          if (m.z < pl.z - 16) { m.busy = false; m.g.visible = false; }
+        }
+        /* лужицы: горят, мерцают, гаснут; наступать нельзя (прыжок спасает) */
+        for (const p2 of patches) {
+          if (p2.life <= 0) continue;
+          p2.life -= dt;
+          if (p2.life <= 0) { p2.g.visible = false; continue; }
+          const a = Math.min(1, p2.life / 0.8);
+          p2.fl.material.opacity = a * (0.75 + Math.sin(time * 21 + p2.z) * 0.25);
+          p2.fl.scale.set(1.1 + Math.sin(time * 17 + p2.z) * 0.2, 1.4 + Math.sin(time * 23 + p2.z) * 0.3, 1);
+          if (pl.canHit && Math.abs(p2.z - pl.z) < 0.85 && Math.abs(p2.x - pl.x) < 0.8 && pl.bot < 0.5) hit();
+        }
+      }
+    };
+  }
 
   /* ===== финал космоса: солнце → сверхновая → чёрная дыра ===== */
   function buildSupernova(scene, L) {
@@ -758,9 +836,14 @@ export const TrackKit = (function () {
     /* предметы и препятствия */
     const items = generateItems(def);
     const arrowTexC = arrowSignTex(key === 'candy' ? '#ff5fa8' : '#9b59d0');
+    const hazards = theme.makeHazards ? theme.makeHazards(scene) : null;
 
     // шаблоны препятствий — клонируем (геометрия общая)
-    const tmpl = { low: theme.low(), bar: theme.bar(arrowTexC), block: theme.block() };
+    const tmpl = {
+      low: theme.low ? theme.low() : null,
+      bar: theme.bar(arrowTexC),
+      block: theme.block ? theme.block() : null
+    };
 
     let nCandy = 0;
     items.forEach((it) => { if (it.kind === 'candy') nCandy++; });
@@ -815,6 +898,10 @@ export const TrackKit = (function () {
         m.position.set(it.x, it.y, it.z);
         scene.add(m);
         it.mesh = m;
+      } else if (hazards && it.kind !== 'bar') {
+        /* космос: точка превращается в летящий метеор */
+        hazards.addRef({ z: it.z, x: it.x, big: it.kind === 'block', used: false });
+        it.skip = true;
       } else {
         const col = COLLIDERS[it.kind];
         it.w = col.w; it.yBot = col.yBot; it.yTop = col.yTop;
@@ -825,6 +912,7 @@ export const TrackKit = (function () {
         it.mesh = m;
       }
     });
+    const liveItems = items.filter((it) => !it.skip);
     /* пул бонусных конфет (рассыпаются при столкновении) */
     const bonusPool = [];
     for (let i = 0; i < BONUS_POOL; i++) {
@@ -834,9 +922,10 @@ export const TrackKit = (function () {
     candyIM.instanceMatrix.needsUpdate = true;
 
     return {
-      def: def, theme: theme, length: L, items: items,
+      def: def, theme: theme, length: L, items: liveItems,
       candyIM: candyIM, bonusPool: bonusPool, totalSweets: totalSweets,
-      skyGroup: skyGroup, finale: finale, laneX: LANE_X, zeroMatrix: zero
+      skyGroup: skyGroup, finale: finale, hazards: hazards,
+      laneX: LANE_X, zeroMatrix: zero
     };
   }
 
